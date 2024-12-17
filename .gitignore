@@ -37,6 +37,7 @@ pubspec.lock
 /windows/
 /web/
 /macos/
+/linux/
 
 # Symbolication related
 app.*.symbols
