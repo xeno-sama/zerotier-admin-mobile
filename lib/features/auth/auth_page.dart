@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rive/rive.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zerotier_manager/bloc/auth_network_bloc/auth_network_bloc.dart';
 import 'package:zerotier_manager/bloc/settings_bloc/settings_bloc.dart';
 import 'package:zerotier_manager/common/custom_paint/background.dart';
@@ -36,72 +34,41 @@ class _AuthPageState extends State<AuthPage> {
   late DataRepository authRepository;
 
   Future<void> _loadSavedTokens() async {
-    final prefs = await SharedPreferences.getInstance();
-    try {
-      final savedTokensStrings = prefs.getStringList('saved_tokens') ?? [];
-      setState(() {
-        _savedTokens = savedTokensStrings
-            .map((String s) {
-              try {
-                return Map<String, String>.from(json.decode(s) as Map);
-              } catch (e) {
-                debugPrint('Error decoding token: $e');
-                return <String, String>{};
-              }
-            })
-            .where((map) => map.isNotEmpty)
-            .toList();
-      });
-    } catch (e) {
-      debugPrint('Error loading saved tokens: $e');
-      setState(() {
-        _savedTokens = [];
-      });
-    }
+    final tokens = await authRepository.loadSavedTokens();
+    setState(() {
+      _savedTokens = tokens;
+    });
   }
 
   Future<void> _saveToken(String name, String token) async {
-    if (name.isNotEmpty &&
-        token.isNotEmpty &&
-        !_savedTokens.any((t) => t['token'] == token)) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        _savedTokens.add({'name': name, 'token': token});
-        await prefs.setStringList(
-          'saved_tokens',
-          _savedTokens.map((t) => json.encode(t)).toList(),
+    if (await authRepository.addSavedToken(name, token)) {
+      setState(_loadSavedTokens);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('l10n.errorSavingToken')),
         );
-        setState(() {});
-      } catch (e) {
-        debugPrint('Error saving token: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('l10n.errorSavingToken')),
-          );
-        }
       }
     }
   }
 
   Future<void> _removeToken(Map<String, String> tokenMap) async {
-    final prefs = await authRepository.getPrefs(); // Используем новый метод
-    _savedTokens.removeWhere((t) => t['token'] == tokenMap['token']);
-    await prefs.setStringList(
-      'saved_tokens',
-      _savedTokens.map((t) => json.encode(t)).toList(),
-    );
-    setState(() {});
+    if (await authRepository.removeSavedToken(tokenMap)) {
+      setState(() {
+        _savedTokens.removeWhere((t) => t['token'] == tokenMap['token']);
+      });
+    }
   }
 
   @override
   void initState() {
     super.initState();
     _initializeRepository();
-    _loadSavedTokens();
   }
 
   Future<void> _initializeRepository() async {
     authRepository = await DataRepository.create();
+    await _loadSavedTokens();
   }
 
   @override

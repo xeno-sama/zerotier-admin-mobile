@@ -8,6 +8,7 @@ import 'package:zerotier_manager/common/functions/text_func.dart';
 import 'package:zerotier_manager/common/l10n/locale.dart';
 import 'package:zerotier_manager/common/models/user.dart';
 import 'package:zerotier_manager/common/widgets/widgets.dart';
+import 'package:zerotier_manager/repository/data_repository.dart';
 import 'package:zerotier_manager/repository/zerotier_repository.dart';
 
 class UsersPage extends StatefulWidget {
@@ -29,6 +30,36 @@ class _UsersPageState extends State<UsersPage> {
   ActivityStatus activityStatus = ActivityStatus.all;
   Map<String, bool> loadingStates =
       {}; // Добавляем состояние загрузки для каждого пользователя
+  late DataRepository _dataRepository;
+  final Map<String, bool> _favoriteStatus = {};
+  bool _showOnlyFavorites = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeRepository();
+  }
+
+  Future<void> _initializeRepository() async {
+    _dataRepository = await DataRepository.create();
+  }
+
+  // Обновляем статус избранного для конкретного пользователя
+  Future<void> _updateFavoriteStatus(String nodeId) async {
+    final isFavorite = await _dataRepository.isUserFavorite(nodeId);
+    if (mounted) {
+      setState(() {
+        _favoriteStatus[nodeId] = isFavorite;
+      });
+    }
+  }
+
+  Future<void> _toggleFavorite(String nodeId) async {
+    await _dataRepository.toggleFavoriteUser(nodeId);
+    if (mounted) {
+      await _updateFavoriteStatus(nodeId);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,24 +94,43 @@ class _UsersPageState extends State<UsersPage> {
                       color: theme.colorScheme.surface,
                     ),
                   ),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _userAddDialog(
-                      context,
-                      widget.networkId,
-                      widget.token,
-                    ),
-                    child: SizedBox(
-                      width: 50,
-                      height: 50,
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Icon(
-                          FontAwesomeIcons.plus,
+                  Row(
+                    children: [
+                      // Favotite users
+                      IconButton(
+                        icon: Icon(
+                          _showOnlyFavorites
+                              ? FontAwesomeIcons.heartCircleCheck
+                              : FontAwesomeIcons.heart,
                           color: Theme.of(context).colorScheme.surface,
                         ),
+                        onPressed: () {
+                          setState(() {
+                            _showOnlyFavorites = !_showOnlyFavorites;
+                          });
+                        },
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _userAddDialog(
+                          context,
+                          widget.networkId,
+                          widget.token,
+                        ),
+                        child: SizedBox(
+                          width: 50,
+                          height: 50,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Icon(
+                              FontAwesomeIcons.plus,
+                              color: Theme.of(context).colorScheme.surface,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -248,16 +298,25 @@ class _UsersPageState extends State<UsersPage> {
                                     )
                                     .toList()[index];
 
+                                // Обновляем статус избранного при построении элемента
+                                if (!_favoriteStatus.containsKey(user.nodeId)) {
+                                  _updateFavoriteStatus(user.nodeId);
+                                }
+
+                                // Фильтр по избранным
+                                if (_showOnlyFavorites &&
+                                    !(_favoriteStatus[user.nodeId] ?? false)) {
+                                  return const SizedBox.shrink();
+                                }
+
                                 // Фильтр по статусу авторизации
                                 if (authStatus == AuthStatus.authorized &&
                                     !user.authorized) {
-                                  return const SizedBox
-                                      .shrink(); // Не отображаем неавторизованных, если выбран фильтр "Авторизован"
+                                  return const SizedBox.shrink();
                                 } else if (authStatus ==
                                         AuthStatus.unauthorized &&
                                     user.authorized) {
-                                  return const SizedBox
-                                      .shrink(); // Не отображаем авторизованных, если выбран фильтр "Неавторизован"
+                                  return const SizedBox.shrink();
                                 }
 
                                 // Фильтр по активности
@@ -277,13 +336,11 @@ class _UsersPageState extends State<UsersPage> {
 
                                 if (activityStatus == ActivityStatus.online &&
                                     !isOnline) {
-                                  return const SizedBox
-                                      .shrink(); // Не отображаем офлайн пользователей, если выбран фильтр "Онлайн"
+                                  return const SizedBox.shrink();
                                 } else if (activityStatus ==
                                         ActivityStatus.offline &&
                                     isOnline) {
-                                  return const SizedBox
-                                      .shrink(); // Не отображаем онлайн пользователей, если выбран фильтр "Офлайн"
+                                  return const SizedBox.shrink();
                                 }
 
                                 return Card(
@@ -341,6 +398,7 @@ class _UsersPageState extends State<UsersPage> {
                                         CrossAxisAlignment.start,
                                     expandedAlignment: Alignment.centerLeft,
                                     children: [
+                                      // NodeID
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
@@ -349,6 +407,7 @@ class _UsersPageState extends State<UsersPage> {
                                           Text(user.nodeId),
                                         ],
                                       ),
+                                      // DeviceIP
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
@@ -357,6 +416,7 @@ class _UsersPageState extends State<UsersPage> {
                                           Text(user.physicalAddress),
                                         ],
                                       ),
+                                      // IPAssignments
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
@@ -365,6 +425,7 @@ class _UsersPageState extends State<UsersPage> {
                                           Text(user.ipAssignments.toString()),
                                         ],
                                       ),
+                                      // LastSeen
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
@@ -373,6 +434,7 @@ class _UsersPageState extends State<UsersPage> {
                                           Text(user.lastSeen),
                                         ],
                                       ),
+                                      // Description
                                       Row(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -395,30 +457,52 @@ class _UsersPageState extends State<UsersPage> {
                                       standartDivider(context),
                                       Row(
                                         mainAxisAlignment:
-                                            MainAxisAlignment.end,
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
-                                          TextButton(
-                                            onPressed: () => _userEditDialog(
-                                              context,
-                                              user,
-                                              widget.token,
+                                          // Add to Favorites
+                                          IconButton(
+                                            icon: Icon(
+                                              FontAwesomeIcons.heart,
+                                              // ignore: use_if_null_to_convert_nulls_to_bools
+                                              color: _favoriteStatus[
+                                                          user.nodeId] ==
+                                                      true
+                                                  ? theme.colorScheme.error
+                                                  : theme.colorScheme.primary,
                                             ),
-                                            child: Text(l10n.editAlt),
+                                            onPressed: () =>
+                                                _toggleFavorite(user.nodeId),
                                           ),
-                                          TextButton(
-                                            onPressed: () {
-                                              _userDeletetDialog(
-                                                context,
-                                                user,
-                                                widget.token,
-                                              );
-                                            },
-                                            child: Text(
-                                              l10n.delete,
-                                              style: TextStyle(
-                                                color: theme.colorScheme.error,
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    _userEditDialog(
+                                                  context,
+                                                  user,
+                                                  widget.token,
+                                                ),
+                                                child: Text(l10n.editAlt),
                                               ),
-                                            ),
+                                              TextButton(
+                                                onPressed: () {
+                                                  _userDeletetDialog(
+                                                    context,
+                                                    user,
+                                                    widget.token,
+                                                  );
+                                                },
+                                                child: Text(
+                                                  l10n.delete,
+                                                  style: TextStyle(
+                                                    color:
+                                                        theme.colorScheme.error,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),

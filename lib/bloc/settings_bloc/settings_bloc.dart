@@ -31,7 +31,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     final language = await repository.getLanguage();
     final fontSizeFactor = await repository.getFontSizeFactor() ?? 1;
     final primaryColorValue =
-        await repository.getPrimaryColor() ?? Colors.blue.value;
+        await repository.getPrimaryColor() ?? Colors.blue.shade500.value;
     emit(
       SettingsState(
         themeMode: themeMode,
