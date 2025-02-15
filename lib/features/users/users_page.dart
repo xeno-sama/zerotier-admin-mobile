@@ -102,7 +102,7 @@ class _UsersPageState extends State<UsersPage> {
                           _showOnlyFavorites
                               ? FontAwesomeIcons.heartCircleCheck
                               : FontAwesomeIcons.heart,
-                          color: Theme.of(context).colorScheme.surface,
+                          color: Theme.of(context).colorScheme.errorContainer,
                         ),
                         onPressed: () {
                           setState(() {
@@ -462,13 +462,13 @@ class _UsersPageState extends State<UsersPage> {
                                           // Add to Favorites
                                           IconButton(
                                             icon: Icon(
-                                              FontAwesomeIcons.heart,
                                               // ignore: use_if_null_to_convert_nulls_to_bools
-                                              color: _favoriteStatus[
-                                                          user.nodeId] ==
+                                              _favoriteStatus[user.nodeId] ==
                                                       true
-                                                  ? theme.colorScheme.error
-                                                  : theme.colorScheme.primary,
+                                                  ? Icons.favorite
+                                                  : Icons.favorite_outline,
+
+                                              color: theme.colorScheme.error,
                                             ),
                                             onPressed: () =>
                                                 _toggleFavorite(user.nodeId),
